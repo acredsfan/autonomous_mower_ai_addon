@@ -1,0 +1,36 @@
+<!-- templates/index.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mower Status Dashboard</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.4.1/socket.io.js"></script>
+    <style>
+        body { font-family: Arial, sans-serif; }
+        .status { font-size: 24px; margin-top: 20px; }
+        .data { margin-top: 10px; }
+    </style>
+</head>
+<body>
+    <h1>Mower Control Interface</h1>
+    <div class="status">
+        <p>Status: <span id="status">Disconnected</span></p>
+        <p>Obstacle: <span id="obstacle">None</span></p>
+        <p>Battery: <span id="battery">Unknown</span></p>
+    </div>
+
+    <script>
+        // Connect to the SocketIO server
+        var socket = io();
+
+        // Listen for data updates
+        socket.on('update_data', function (data) {
+            document.getElementById('status').innerText = data.status || 'Disconnected';
+            document.getElementById('obstacle').innerText = data.obstacle || 'None';
+            document.getElementById('battery').innerText = data.battery || 'Unknown';
+        });
+    </script>
+</body>
+</html>
