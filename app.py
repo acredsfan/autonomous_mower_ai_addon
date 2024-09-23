@@ -6,8 +6,8 @@ from PIL import Image, ImageDraw
 
 app = Flask(__name__)
 
-# Load your object detection model
-model = tf.saved_model.load('ssd_mobilenet_v2_fpnlite_320x320/saved_model')
+# Load your object detection model from the folder where this module is launched
+model = tf.saved_model.load('mobilenet_v2_1.0_224.tflite')
 
 
 def detect_objects(image):
@@ -34,6 +34,12 @@ def process_frame(frame):
     output = BytesIO()
     image.save(output, format='JPEG')
     return output.getvalue()
+
+
+def detect_surface_type(frame):
+    """Detect surface type from frame."""
+    # Your surface type detection logic here
+    return 'Grass'
 
 
 def stream_from_pi4():
