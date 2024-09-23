@@ -9,11 +9,13 @@ app = Flask(__name__)
 # Load your object detection model
 model = tf.saved_model.load('ssd_mobilenet_v2_fpnlite_320x320/saved_model')
 
+
 def detect_objects(image):
     # Preprocess image for TensorFlow detection model
     input_tensor = tf.convert_to_tensor([image])
     detections = model(input_tensor)
     return detections
+
 
 def process_frame(frame):
     """Process frame, run detection, and draw bounding boxes."""
@@ -21,17 +23,18 @@ def process_frame(frame):
     detections = detect_objects(image)
 
     draw = ImageDraw.Draw(image)
-    
+
     for detection in detections['detection_boxes']:
         # Example bounding box drawing logic using PIL
         # You can convert normalized coordinates (0-1) to pixel coordinates here
         draw.rectangle(((x1, y1), (x2, y2)), outline="green", width=2)
         draw.text((x1, y1), 'Object', fill="green")
-    
+
     # Convert processed image back to JPEG
     output = BytesIO()
     image.save(output, format='JPEG')
     return output.getvalue()
+
 
 def stream_from_pi4():
     """Stream video from Pi 4 and process it."""
@@ -47,9 +50,11 @@ def stream_from_pi4():
         yield (b'--frame\r\n'
                b'Content-Type: image/jpeg\r\n\r\n' + processed_frame + b'\r\n\r\n')
 
+
 @app.route('/video_feed')
 def video_feed():
     return Response(stream_from_pi4(), mimetype='multipart/x-mixed-replace; boundary=frame')
+
 
 if __name__ == "__main__":
     app.run(host='0.0.0.0', port=5000)
