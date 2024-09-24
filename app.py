@@ -6,11 +6,21 @@ from io import BytesIO
 import numpy as np
 from dotenv import load_dotenv
 import os
+from logger_config import LoggerConfigDebug
+
+LoggerConfigDebug.configure_logging()
 
 app = Flask(__name__)
 
+# Load environment variables from .env file in project_root directory
+project_root = os.path.dirname(os.path.abspath(__file__))
+dotenv_path = os.path.join(project_root, '.env')
+load_dotenv(dotenv_path)
+
+
 # Load the Hailo YOLOv8 model
-HEF_PATH = 'yolov8_hailo_model.hef'  # Path to the Hailo HEF model file
+# Path to the Hailo HEF model file (project_root/models/yolov8_hailo_model.hef)
+HEF_PATH = os.path.join(project_root, 'models', 'yolov8_hailo_model.hef')
 device = hailort.Device()
 hef = hailort.HEF(HEF_PATH)
 network_group = device.configure(hef)
@@ -67,7 +77,8 @@ def process_frame(frame):
 
 def stream_from_pi4():
     """Stream video from Pi 4 and process it using Hailo chip on Pi 5."""
-    stream_url = 'http://<PI4_IP>:8000/video_feed'  # Change <PI4_IP> to the actual IP of the Pi 4
+    # From .env Pi4_IP variable
+    stream_url = os.getenv('Pi4_IP')
     response = requests.get(stream_url, stream=True)
 
     for chunk in response.iter_content(chunk_size=4096):
@@ -78,12 +89,14 @@ def stream_from_pi4():
         processed_frame = process_frame(chunk)
 
         yield (b'--frame\r\n'
-               b'Content-Type: image/jpeg\r\n\r\n' + processed_frame + b'\r\n\r\n')
-        
+               b'Content-Type: image/jpeg\r\n\r\n' +
+               processed_frame + b'\r\n\r\n')
+
 
 @app.route('/video_feed')
 def video_feed():
-    return Response(stream_from_pi4(), mimetype='multipart/x-mixed-replace; boundary=frame')
+    return Response(stream_from_pi4(),
+                    mimetype='multipart/x-mixed-replace; boundary=frame')
 
 
 if __name__ == "__main__":
