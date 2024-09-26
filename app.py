@@ -6,7 +6,8 @@ import os
 from dotenv import load_dotenv
 from PIL import Image, ImageDraw
 import numpy as np
-import pyhailort as hailort
+from hailo_platform import VDevice, HEF, FormatType, HailoStreamInterface
+from hailo_platform.pyhailort.pyhailort import InputVStreamParams, OutputVStreamParams
 import logging
 
 # Initialize logger
@@ -15,45 +16,58 @@ logging.basicConfig(level=logging.INFO)
 # Load environment variables from .env file
 load_dotenv()
 PI4_IP = os.getenv('PI4_IP')  # IP address of the Pi 4
+HEF_PATH = os.getenv('HEF_PATH')  # Path to your Hailo HEF model file
 
 app = Flask(__name__)
 
-# Load the Hailo model
-HEF_PATH = os.getenv('HEF_PATH')  # Path to your Hailo HEF model file
-device = hailort.Device()
-hef = hailort.HEF(HEF_PATH)
-network_group = device.configure(hef)
-input_vstream = network_group.create_input_vstream()
-output_vstream = network_group.create_output_vstream()
+# Load the Hailo model and set up the device
+hef = HEF(HEF_PATH)
+network_groups = hef.get_network_groups()
+network_group = network_groups[0]  # Assuming you have one network group
+
+# Create a VDevice
+vdevice = VDevice()
+
+# Configure the network group on the VDevice
+configured_network_group = vdevice.configure(network_group)
+
+# Create Input and Output VStreams parameters
+input_vstreams_params = InputVStreamParams.from_hef(hef, quantized=False)
+output_vstreams_params = OutputVStreamParams.from_hef(hef, quantized=False)
+
+# Create Input and Output VStreams
+input_vstreams = vdevice.create_input_vstreams(configured_network_group, input_vstreams_params)
+output_vstreams = vdevice.create_output_vstreams(configured_network_group, output_vstreams_params)
 
 def preprocess_image(image):
     """Preprocess the image for Hailo model."""
+    # Adjust the preprocessing steps according to your model's requirements
     image = image.resize((640, 640))  # Adjust to your model's expected input size
-    image = np.array(image).astype(np.float32) / 255.0  # Normalize image
-    image = np.expand_dims(image, axis=0)  # Add batch dimension
+    image = np.array(image).astype(np.uint8)
+    # Reorder dimensions if necessary (e.g., HWC to CHW)
+    image = np.transpose(image, (2, 0, 1))  # If your model requires CHW format
     return image
 
 def run_inference_on_hailo(image):
     """Run inference on Hailo chip."""
     preprocessed_image = preprocess_image(image)
-
+    
     # Send the preprocessed image to the Hailo input stream
-    input_vstream.write(preprocessed_image)
-
+    input_vstreams[0].write(preprocessed_image)
+    
     # Get the output from the Hailo output stream
-    output = output_vstream.read()
-
+    output = output_vstreams[0].read()
+    
     # Interpret the output according to your model
-    # This will depend on your model's output format
     predictions = interpret_output(output)
     return predictions
 
 def interpret_output(output):
     """Interpret the model output and return predictions."""
     # Implement according to your model's output
-    # For example:
+    # For example, parse the output tensor to extract bounding boxes and labels
     predictions = []
-    # Parse output and populate predictions list
+    # Parse outputs and populate predictions list
     return predictions
 
 def process_frame(image):
