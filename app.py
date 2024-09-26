@@ -1,4 +1,6 @@
-from flask import Flask, Response, request, jsonify
+# app.py - Pi 5
+
+from flask import Flask, Response
 import threading
 import os
 from dotenv import load_dotenv
@@ -8,11 +10,10 @@ from gi.repository import Gst, GLib
 from logger_config import LoggerConfigInfo
 
 # Initialize logger
-logging = LoggerConfigInfo()
+logging = LoggerConfigInfo().get_logger(__name__)
 
 # Load environment variables from .env file
 load_dotenv()
-PI4_IP = os.getenv('PI4_IP')  # IP address of the Pi 4
 HEF_PATH = os.getenv('HEF_PATH')  # Path to your Hailo HEF model file
 POSTPROCESS_SO_PATH = os.getenv('POSTPROCESS_SO_PATH')  # Path to your post-processing .so file
 
@@ -41,8 +42,10 @@ def on_new_sample(sink, data):
 def gst_pipeline_thread():
     """Function that runs the GStreamer pipeline."""
     pipeline_str = f"""
-        souphttpsrc location=http://{PI4_IP}:8000/video_feed ! 
-        jpegdec ! 
+        udpsrc port=5000 caps = "application/x-rtp, media=video, encoding-name=H264, payload=96" ! 
+        rtph264depay ! 
+        h264parse ! 
+        avdec_h264 ! 
         videoconvert ! 
         videoscale ! 
         video/x-raw,format=RGB,width=640,height=640 ! 
@@ -63,14 +66,20 @@ def gst_pipeline_thread():
     # Start the pipeline
     pipeline.set_state(Gst.State.PLAYING)
     
-    # Create a GLib MainLoop to run GStreamer
-    loop = GLib.MainLoop()
-    try:
-        loop.run()
-    except Exception as e:
-        logging.error(f"GStreamer pipeline error: {e}")
-    finally:
-        pipeline.set_state(Gst.State.NULL)
+    # Run the pipeline
+    bus = pipeline.get_bus()
+    while True:
+        message = bus.timed_pop_filtered(10000, Gst.MessageType.ERROR | Gst.MessageType.EOS)
+        if message:
+            if message.type == Gst.MessageType.ERROR:
+                err, debug = message.parse_error()
+                logging.error(f"GStreamer Error: {err}, {debug}")
+                break
+            elif message.type == Gst.MessageType.EOS:
+                logging.info("GStreamer End of Stream")
+                break
+        time.sleep(0.1)
+    pipeline.set_state(Gst.State.NULL)
 
 @app.route('/video_feed')
 def video_feed():
@@ -81,6 +90,7 @@ def video_feed():
                     frame_data = latest_frame
                     yield (b'--frame\r\n'
                            b'Content-Type: image/jpeg\r\n\r\n' + frame_data + b'\r\n')
+            time.sleep(0.03)  # Adjust as needed for frame rate
     return Response(generate(), mimetype='multipart/x-mixed-replace; boundary=frame')
 
 if __name__ == "__main__":
