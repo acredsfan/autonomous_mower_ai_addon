@@ -9,7 +9,7 @@ gi.require_version('Gst', '1.0')
 from gi.repository import Gst, GLib
 from logger_config import LoggerConfigInfo
 import time
-import hailo_platform
+import hailo
 
 # Initialize logger
 logging = LoggerConfigInfo().get_logger(__name__)
@@ -33,7 +33,7 @@ frame_lock = threading.Lock()
 
 
 def check_hailo_device():
-    available_devices = hailo_platform.scan_devices()
+    available_devices = hailo.scan_devices()
     if len(available_devices) == 0:
         logging.error("No Hailo devices found")
         return False
@@ -108,8 +108,12 @@ def index():
     return render_template('index.html')
 
 if __name__ == "__main__":
-    # Start GStreamer pipeline in a separate thread
-    gst_thread = threading.Thread(target=gst_pipeline_thread)
-    gst_thread.daemon = True
-    gst_thread.start()
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    # Check if the Hailo device is available before starting the pipeline
+    if check_hailo_device():
+        # Start GStreamer pipeline in a separate thread
+        gst_thread = threading.Thread(target=gst_pipeline_thread)
+        gst_thread.daemon = True
+        gst_thread.start()
+        app.run(host='0.0.0.0', port=5000, debug=True)
+    else:
+        logging.error("Exiting: Hailo device not found.")
