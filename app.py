@@ -5,10 +5,10 @@ from dotenv import load_dotenv
 import gi
 gi.require_version('Gst', '1.0')
 from gi.repository import Gst, GLib
-import logging
+from logger_config import LoggerConfigInfo
 
 # Initialize logger
-logging.basicConfig(level=logging.INFO)
+logging = LoggerConfigInfo()
 
 # Load environment variables from .env file
 load_dotenv()
