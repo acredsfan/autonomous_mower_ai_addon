@@ -43,6 +43,7 @@ def on_new_sample(sink, data):
         buf.unmap(map_info)
     return Gst.FlowReturn.OK
 
+
 def gst_pipeline_thread():
     """Function that runs the GStreamer pipeline."""
     pipeline_str = f"""
@@ -52,13 +53,10 @@ def gst_pipeline_thread():
         avdec_h264 ! 
         videoconvert ! 
         videoscale ! 
-        video/x-raw,format=RGB,width=640,height=640 !
-        tee name=t !
-        hailomuxer name=hmux !
-        hailonet hef-path={HEF_PATH} batch-size=1 force-writable=true ! 
-        hailofilter so-path={POSTPROCESS_SO_PATH} qos=false ! 
+        video/x-raw,format=RGB,width=640,height=640 ! 
+        hailonet hef-path={HEF_PATH} batch-size=1 ! 
         hailooverlay ! 
-        videoconvert n-threads=3 qos=false ! 
+        videoconvert ! 
         jpegenc ! 
         appsink name=appsink emit-signals=true max-buffers=1 drop=true
     """
