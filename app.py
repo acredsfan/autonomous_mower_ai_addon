@@ -6,7 +6,7 @@ import os
 from dotenv import load_dotenv
 from PIL import Image, ImageDraw
 import numpy as np
-import hailo_platform.pyhailort as hailort
+import pyhailort as hailort
 import logging
 
 # Initialize logger
