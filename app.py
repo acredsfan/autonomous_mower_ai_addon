@@ -1,6 +1,6 @@
 # app.py - Pi 5
 
-from flask import Flask, Response
+from flask import Flask, Response, render_template
 import threading
 import os
 from dotenv import load_dotenv
@@ -47,7 +47,7 @@ def on_new_sample(sink, data):
 def gst_pipeline_thread():
     """Function that runs the GStreamer pipeline."""
     pipeline_str = f"""
-        udpsrc port=5000 caps = "application/x-rtp, media=video, encoding-name=H264, payload=96" ! 
+        udpsrc port=5000 caps="application/x-rtp, media=video, encoding-name=H264, payload=96" ! 
         rtph264depay ! 
         h264parse ! 
         avdec_h264 ! 
@@ -58,14 +58,9 @@ def gst_pipeline_thread():
         hailooverlay ! 
         videoconvert ! 
         jpegenc ! 
-        appsink name=appsink emit-signals=true max-buffers=1 drop=true
+        multifilesink location=/tmp/frame%05d.jpg max-files=1
     """
     pipeline = Gst.parse_launch(pipeline_str)
-    appsink = pipeline.get_by_name('appsink')
-    appsink.connect('new-sample', on_new_sample, None)
-    appsink.set_property('emit-signals', True)
-    appsink.set_property('max-buffers', 1)
-    appsink.set_property('drop', True)
     
     # Start the pipeline
     pipeline.set_state(Gst.State.PLAYING)
@@ -89,13 +84,13 @@ def gst_pipeline_thread():
 def video_feed():
     def generate():
         while True:
-            with frame_lock:
-                if latest_frame:
-                    frame_data = latest_frame
-                    yield (b'--frame\r\n'
-                           b'Content-Type: image/jpeg\r\n\r\n' + frame_data + b'\r\n')
+            with open('/tmp/frame00000.jpg', 'rb') as frame_file:
+                frame_data = frame_file.read()
+                yield (b'--frame\r\n'
+                       b'Content-Type: image/jpeg\r\n\r\n' + frame_data + b'\r\n')
             time.sleep(0.03)  # Adjust as needed for frame rate
     return Response(generate(), mimetype='multipart/x-mixed-replace; boundary=frame')
+
 
 @app.route('/')
 def index():
