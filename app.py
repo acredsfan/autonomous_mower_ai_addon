@@ -1,13 +1,10 @@
 from flask import Flask, Response, request, jsonify
-import requests
 import threading
-import io
 import os
 from dotenv import load_dotenv
-from PIL import Image, ImageDraw
-import numpy as np
-from hailo_platform import VDevice, HEF, FormatType, HailoStreamInterface
-from hailo_platform.pyhailort.pyhailort import InputVStreamParams, OutputVStreamParams
+import gi
+gi.require_version('Gst', '1.0')
+from gi.repository import Gst, GLib
 import logging
 
 # Initialize logger
@@ -17,110 +14,78 @@ logging.basicConfig(level=logging.INFO)
 load_dotenv()
 PI4_IP = os.getenv('PI4_IP')  # IP address of the Pi 4
 HEF_PATH = os.getenv('HEF_PATH')  # Path to your Hailo HEF model file
+POSTPROCESS_SO_PATH = os.getenv('POSTPROCESS_SO_PATH')  # Path to your post-processing .so file
 
 app = Flask(__name__)
 
-# Load the Hailo model and set up the device
-hef = HEF(HEF_PATH)
-network_groups = hef.get_network_groups()
-network_group = network_groups[0]  # Assuming you have one network group
+# Initialize GStreamer
+Gst.init(None)
 
-# Create a VDevice
-vdevice = VDevice()
+# Global variables to store the latest processed frame
+latest_frame = None
+frame_lock = threading.Lock()
 
-# Configure the network group on the VDevice
-configured_network_group = vdevice.configure(network_group)
+def on_new_sample(sink, data):
+    """Callback function called when a new sample is ready from the appsink."""
+    sample = sink.emit('pull-sample')
+    buf = sample.get_buffer()
+    success, map_info = buf.map(Gst.MapFlags.READ)
+    if success:
+        frame_data = map_info.data
+        with frame_lock:
+            global latest_frame
+            latest_frame = frame_data
+        buf.unmap(map_info)
+    return Gst.FlowReturn.OK
 
-# Create Input and Output VStreams parameters
-input_vstreams_params = InputVStreamParams.from_hef(hef, quantized=False)
-output_vstreams_params = OutputVStreamParams.from_hef(hef, quantized=False)
-
-# Create Input and Output VStreams
-input_vstreams = vdevice.create_input_vstreams(configured_network_group, input_vstreams_params)
-output_vstreams = vdevice.create_output_vstreams(configured_network_group, output_vstreams_params)
-
-def preprocess_image(image):
-    """Preprocess the image for Hailo model."""
-    # Adjust the preprocessing steps according to your model's requirements
-    image = image.resize((640, 640))  # Adjust to your model's expected input size
-    image = np.array(image).astype(np.uint8)
-    # Reorder dimensions if necessary (e.g., HWC to CHW)
-    image = np.transpose(image, (2, 0, 1))  # If your model requires CHW format
-    return image
-
-def run_inference_on_hailo(image):
-    """Run inference on Hailo chip."""
-    preprocessed_image = preprocess_image(image)
+def gst_pipeline_thread():
+    """Function that runs the GStreamer pipeline."""
+    pipeline_str = f"""
+        souphttpsrc location=http://{PI4_IP}:8000/video_feed ! 
+        jpegdec ! 
+        videoconvert ! 
+        videoscale ! 
+        video/x-raw,format=RGB,width=640,height=640 ! 
+        hailonet hef-path={HEF_PATH} batch-size=1 ! 
+        hailofilter so-path={POSTPROCESS_SO_PATH} ! 
+        hailooverlay ! 
+        videoconvert ! 
+        jpegenc ! 
+        appsink name=appsink emit-signals=true max-buffers=1 drop=true
+    """
+    pipeline = Gst.parse_launch(pipeline_str)
+    appsink = pipeline.get_by_name('appsink')
+    appsink.connect('new-sample', on_new_sample, None)
+    appsink.set_property('emit-signals', True)
+    appsink.set_property('max-buffers', 1)
+    appsink.set_property('drop', True)
     
-    # Send the preprocessed image to the Hailo input stream
-    input_vstreams[0].write(preprocessed_image)
+    # Start the pipeline
+    pipeline.set_state(Gst.State.PLAYING)
     
-    # Get the output from the Hailo output stream
-    output = output_vstreams[0].read()
-    
-    # Interpret the output according to your model
-    predictions = interpret_output(output)
-    return predictions
-
-def interpret_output(output):
-    """Interpret the model output and return predictions."""
-    # Implement according to your model's output
-    # For example, parse the output tensor to extract bounding boxes and labels
-    predictions = []
-    # Parse outputs and populate predictions list
-    return predictions
-
-def process_frame(image):
-    """Process each frame for object detection."""
-    # Run inference
-    predictions = run_inference_on_hailo(image)
-
-    # Draw bounding boxes and labels on the image
-    draw = ImageDraw.Draw(image)
-    for pred in predictions:
-        x1, y1, x2, y2 = pred['bbox']
-        label = pred['label']
-        confidence = pred['confidence']
-        draw.rectangle([x1, y1, x2, y2], outline="green", width=2)
-        draw.text((x1, y1), f'{label} ({confidence:.2f})', fill="green")
-
-    # Convert processed image back to bytes
-    output = io.BytesIO()
-    image.save(output, format='JPEG')
-    return output.getvalue()
-
-def stream_video():
-    """Stream video from Pi 4, process it, and serve to clients."""
-    stream_url = f'http://{PI4_IP}:8000/video_feed'
-    response = requests.get(stream_url, stream=True)
-    bytes_buffer = b''
-    for chunk in response.iter_content(chunk_size=1024):
-        bytes_buffer += chunk
-        a = bytes_buffer.find(b'\xff\xd8')
-        b = bytes_buffer.find(b'\xff\xd9')
-        if a != -1 and b != -1:
-            jpg = bytes_buffer[a:b+2]
-            bytes_buffer = bytes_buffer[b+2:]
-            image = Image.open(io.BytesIO(jpg))
-            processed_frame = process_frame(image)
-            yield (b'--frame\r\n'
-                   b'Content-Type: image/jpeg\r\n\r\n' + processed_frame + b'\r\n')
+    # Create a GLib MainLoop to run GStreamer
+    loop = GLib.MainLoop()
+    try:
+        loop.run()
+    except Exception as e:
+        logging.error(f"GStreamer pipeline error: {e}")
+    finally:
+        pipeline.set_state(Gst.State.NULL)
 
 @app.route('/video_feed')
 def video_feed():
-    return Response(stream_video(),
-                    mimetype='multipart/x-mixed-replace; boundary=frame')
-
-@app.route('/detect', methods=['POST'])
-def detect():
-    if 'image' not in request.files:
-        return jsonify({'error': 'No image provided'}), 400
-    image_file = request.files['image']
-    image = Image.open(image_file.stream)
-    predictions = run_inference_on_hailo(image)
-    # Determine if obstacle is detected based on your criteria
-    obstacle_detected = any(pred['confidence'] > 0.5 for pred in predictions)
-    return jsonify({'obstacle_detected': obstacle_detected})
+    def generate():
+        while True:
+            with frame_lock:
+                if latest_frame:
+                    frame_data = latest_frame
+                    yield (b'--frame\r\n'
+                           b'Content-Type: image/jpeg\r\n\r\n' + frame_data + b'\r\n')
+    return Response(generate(), mimetype='multipart/x-mixed-replace; boundary=frame')
 
 if __name__ == "__main__":
+    # Start GStreamer pipeline in a separate thread
+    gst_thread = threading.Thread(target=gst_pipeline_thread)
+    gst_thread.daemon = True
+    gst_thread.start()
     app.run(host='0.0.0.0', port=5000)
