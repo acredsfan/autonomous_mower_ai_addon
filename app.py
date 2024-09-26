@@ -8,10 +8,9 @@ from PIL import Image, ImageDraw
 import numpy as np
 import hailo_platform.pyhailort as hailort
 import logging
-from utilities import LoggerConfigInfo as LoggerConfig
 
 # Initialize logger
-logging = LoggerConfig.get_logger(__name__)
+logging.basicConfig(level=logging.INFO)
 
 # Load environment variables from .env file
 load_dotenv()
