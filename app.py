@@ -18,6 +18,9 @@ load_dotenv()
 HEF_PATH = os.getenv('HEF_PATH')  # Path to your Hailo HEF model file
 POSTPROCESS_SO_PATH = os.getenv('POSTPROCESS_SO_PATH')  # Path to your post-processing .so file
 
+logging.info(f"HEF_PATH: {HEF_PATH}")
+logging.info(f"POSTPROCESS_SO_PATH: {POSTPROCESS_SO_PATH}")
+
 app = Flask(__name__)
 
 # Initialize GStreamer
