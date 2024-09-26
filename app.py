@@ -9,6 +9,7 @@ gi.require_version('Gst', '1.0')
 from gi.repository import Gst, GLib
 from logger_config import LoggerConfigInfo
 import time
+import hailo_platform
 
 # Initialize logger
 logging = LoggerConfigInfo().get_logger(__name__)
@@ -29,6 +30,16 @@ Gst.init(None)
 # Global variables to store the latest processed frame
 latest_frame = None
 frame_lock = threading.Lock()
+
+
+def check_hailo_device():
+    available_devices = hailo_platform.scan_devices()
+    if len(available_devices) == 0:
+        logging.error("No Hailo devices found")
+        return False
+    else:
+        logging.info(f"Found {len(available_devices)} Hailo devices")
+        return True
 
 def on_new_sample(sink, data):
     """Callback function called when a new sample is ready from the appsink."""
