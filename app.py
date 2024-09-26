@@ -94,9 +94,13 @@ def video_feed():
             time.sleep(0.03)  # Adjust as needed for frame rate
     return Response(generate(), mimetype='multipart/x-mixed-replace; boundary=frame')
 
+@app.route('/')
+def index():
+    return render_template('index.html')
+
 if __name__ == "__main__":
     # Start GStreamer pipeline in a separate thread
     gst_thread = threading.Thread(target=gst_pipeline_thread)
     gst_thread.daemon = True
     gst_thread.start()
-    app.run(host='0.0.0.0', port=5000)
+    app.run(host='0.0.0.0', port=5000, debug=True)
