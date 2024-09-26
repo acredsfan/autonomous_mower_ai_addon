@@ -49,11 +49,13 @@ def gst_pipeline_thread():
         avdec_h264 ! 
         videoconvert ! 
         videoscale ! 
-        video/x-raw,format=RGB,width=640,height=640 ! 
-        hailonet hef-path={HEF_PATH} batch-size=1 ! 
-        hailofilter so-path={POSTPROCESS_SO_PATH} ! 
+        video/x-raw,format=RGB,width=640,height=640 !
+        tee name=t !
+        hailomuxer name=hmux 
+        hailonet hef-path={HEF_PATH} batch-size=1 force-writable=true ! 
+        hailofilter so-path={POSTPROCESS_SO_PATH} qos=false ! 
         hailooverlay ! 
-        videoconvert ! 
+        videoconvert n-threads=3 qos=false ! 
         jpegenc ! 
         appsink name=appsink emit-signals=true max-buffers=1 drop=true
     """
