@@ -51,7 +51,7 @@ def gst_pipeline_thread():
         videoscale ! 
         video/x-raw,format=RGB,width=640,height=640 !
         tee name=t !
-        hailomuxer name=hmux 
+        hailomuxer name=hmux !
         hailonet hef-path={HEF_PATH} batch-size=1 force-writable=true ! 
         hailofilter so-path={POSTPROCESS_SO_PATH} qos=false ! 
         hailooverlay ! 
