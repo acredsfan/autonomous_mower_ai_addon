@@ -16,7 +16,8 @@ logging = LoggerConfigInfo().get_logger(__name__)
 load_dotenv()
 HEF_PATH = os.getenv('HEF_PATH')  # Path to your Hailo HEF model file
 POSTPROCESS_SO_PATH = os.getenv('POSTPROCESS_SO_PATH')  # Path to post-processing .so file
-PI4_IP = os.getenv('Pi4_IP')  # IP address of the Pi 4 sending the video stream
+PI4_IP = os.getenv('PI4_IP')  # IP address of the Pi 4 sending the video stream
+PI4_PORT = os.getenv('PI4_PORT', '8000')  # Port number for the video stream
 
 logging.info(f"HEF_PATH: {HEF_PATH}")
 logging.info(f"POSTPROCESS_SO_PATH: {POSTPROCESS_SO_PATH}")
@@ -74,7 +75,7 @@ def gst_pipeline_thread():
     and edge detection, and overlays the results on the video.
     """
     pipeline_str = f"""
-        udpsrc address={PI4_IP} port=5000 caps="application/x-rtp, media=video, encoding-name=H264, payload=96" ! 
+        udpsrc address={PI4_IP} port={PI4_PORT} caps="application/x-rtp, media=video, encoding-name=H264, payload=96" ! 
         rtph264depay ! 
         h264parse ! 
         avdec_h264 ! 
