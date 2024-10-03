@@ -75,7 +75,7 @@ def gst_pipeline_thread():
     and edge detection, and overlays the results on the video.
     """
     pipeline_str = f"""
-        udpsrc address={PI4_IP} port={PI4_PORT} caps="application/x-rtp, media=video, encoding-name=H264, payload=96" ! 
+        udpsrc port={PI4_PORT} caps="application/x-rtp, media=video, encoding-name=H264, payload=96" ! 
         rtph264depay ! 
         h264parse ! 
         avdec_h264 ! 
