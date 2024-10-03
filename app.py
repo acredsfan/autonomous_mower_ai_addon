@@ -7,7 +7,7 @@ gi.require_version('Gst', '1.0')
 from gi.repository import Gst, GLib
 from logger_config import LoggerConfigInfo
 import time
-import hailo
+import hailo_platform as hailo
 
 # Initialize logger
 logging = LoggerConfigInfo().get_logger(__name__)
