@@ -7,7 +7,7 @@ gi.require_version('Gst', '1.0')
 from gi.repository import Gst, GLib
 from logger_config import LoggerConfigInfo
 import time
-import hailo.pyhailort as hailo
+import hailo_platform as hailo
 
 # Initialize logger
 logging = LoggerConfigInfo().get_logger(__name__)
@@ -37,7 +37,7 @@ def check_hailo_device():
     Returns:
         bool: True if the Hailo device is found, False otherwise.
     """
-    available_devices = hailo.scan_devices()
+    available_devices = hailo.PcieDevice.scan_devices()
     if len(available_devices) == 0:
         logging.error("No Hailo devices found")
         return False
