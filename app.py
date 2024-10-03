@@ -38,7 +38,7 @@ def check_hailo_device():
     Returns:
         bool: True if the Hailo device is found, False otherwise.
     """
-    available_devices = hailo.PcieDevice.scan_devices()
+    available_devices = hailo.Device.scan()
     if len(available_devices) == 0:
         logging.error("No Hailo devices found")
         return False
@@ -81,7 +81,7 @@ def gst_pipeline_thread():
         avdec_h264 ! 
         videoconvert ! 
         videoscale ! 
-        video/x-raw,format=RGB,width=1280,height=720 ! 
+        video/x-raw,format=BGR,width=1280,height=720 ! 
         hailonet hef-path={HEF_PATH} batch-size=1 ! 
         hailofilter so-path={POSTPROCESS_SO_PATH} ! 
         hailooverlay ! 
