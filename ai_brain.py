@@ -144,7 +144,8 @@ def path_planning_algorithm(obstacle_map, pattern_type):
     """Main path planning algorithm integrating pattern selection and A*."""
     global obstacles
     # Obstacles will come from mower/obstacle_location topic as an array of tuples with
-    obstacles = [gps_to_xy(obstacle[0], obstacle[1]) for obstacle in obstacle_map["obstacles"]]
+    # If no obstacles are present, the array will be empty
+    obstacles = [gps_to_xy(lat, lon) for lat, lon in obstacle_map]
 
     # Generate mowing pattern waypoints
     waypoints = create_pattern(pattern_type, grid.shape)
