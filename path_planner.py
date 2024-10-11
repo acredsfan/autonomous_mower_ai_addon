@@ -1,0 +1,161 @@
+import paho.mqtt.client as mqtt
+import json
+import time
+import numpy as np
+from dotenv import load_dotenv
+import os
+import math
+
+# Load environment variables from .env file
+load_dotenv()
+
+# MQTT settings from .env file
+BROKER = os.getenv("MQTT_BROKER_IP")
+PORT = int(os.getenv("MQTT_PORT", 1883))
+SENSOR_TOPIC = os.getenv("SENSOR_TOPIC", "mower/sensor_data")
+COMMAND_TOPIC = os.getenv("COMMAND_TOPIC", "mower/commands")
+CLIENT_ID = os.getenv("MQTT_CLIENT_ID", "RaspberryPiPlanner")
+
+# Read the mowing area from a JSON file (Google Maps API polygon)
+def load_mowing_area(filename="mowing_area.json"):
+    """Load mowing area polygon from JSON file."""
+    with open(filename, "r") as f:
+        mowing_area = json.load(f)
+    return mowing_area["polygon"]
+
+mowing_area_polygon = load_mowing_area()  # Load polygon from JSON file
+
+def point_in_polygon(x, y, polygon):
+    """Check if a point (x, y) is inside the polygon."""
+    num_points = len(polygon)
+    j = num_points - 1
+    inside = False
+    for i in range(num_points):
+        xi, yi = polygon[i]
+        xj, yj = polygon[j]
+        if ((yi > y) != (yj > y)) and (x < (xj - xi) * (y - yi) / (yj - yi) + xi):
+            inside = not inside
+        j = i
+    return inside
+
+def generate_grid_from_polygon(polygon, grid_size=1):
+    """Generate a grid of points within the mowing area polygon."""
+    min_x = min(point[0] for point in polygon)
+    max_x = max(point[0] for point in polygon)
+    min_y = min(point[1] for point in polygon)
+    max_y = max(point[1] for point in polygon)
+
+    grid_points = []
+    for x in np.arange(min_x, max_x, grid_size):
+        for y in np.arange(min_y, max_y, grid_size):
+            if point_in_polygon(x, y, polygon):
+                grid_points.append((x, y))
+    return grid_points
+
+grid = generate_grid_from_polygon(mowing_area_polygon)
+
+# A* Pathfinding Algorithm
+def a_star_pathfinding(start, end, grid, obstacles):
+    """A* algorithm to find the shortest path from start to end."""
+    open_list = []
+    closed_list = []
+    open_list.append(start)
+
+    g = {start: 0}  # Cost from start to node
+    f = {start: heuristic(start, end)}  # Estimated cost from start to end
+
+    parent = {start: None}
+
+    def neighbors(node):
+        x, y = node
+        # Neighboring cells (4-way movement)
+        potential_neighbors = [(x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)]
+        # Filter out neighbors that are obstacles or outside the grid
+        return [n for n in potential_neighbors if n in grid and n not in obstacles]
+
+    while open_list:
+        # Get the node with the lowest f-score
+        current = min(open_list, key=lambda n: f[n])
+
+        if current == end:
+            # Path has been found; reconstruct it
+            path = []
+            while current:
+                path.append(current)
+                current = parent[current]
+            return path[::-1]
+
+        open_list.remove(current)
+        closed_list.append(current)
+
+        for neighbor in neighbors(current):
+            if neighbor in closed_list:
+                continue
+
+            tentative_g = g[current] + 1  # Distance between nodes is 1
+            if neighbor not in open_list or tentative_g < g[neighbor]:
+                parent[neighbor] = current
+                g[neighbor] = tentative_g
+                f[neighbor] = g[neighbor] + heuristic(neighbor, end)
+
+                if neighbor not in open_list:
+                    open_list.append(neighbor)
+
+    return []  # No path found
+
+def heuristic(node1, node2):
+    """Heuristic for A* (Euclidean distance)."""
+    return math.sqrt((node1[0] - node2[0]) ** 2 + (node1[1] - node2[1]) ** 2)
+
+def navigate_to_waypoints(waypoints, grid, obstacles):
+    """Navigate mower through a list of waypoints using A* for obstacle avoidance."""
+    for i in range(len(waypoints) - 1):
+        start = waypoints[i]
+        end = waypoints[i + 1]
+        path = a_star_pathfinding(start, end, grid, obstacles)
+        for step in path:
+            # Publish each movement command based on path
+            command = {"action": "move_to", "position": step}
+            client.publish(COMMAND_TOPIC, json.dumps(command))
+            time.sleep(0.5)  # Adjust timing for smoother motion
+
+def path_planning_algorithm(sensor_data, pattern_type):
+    """Main path planning algorithm integrating pattern selection and A*."""
+    # Placeholder for obstacles from sensor data
+    global obstacles
+    obstacles = [(int(sensor_data["position"]["x"]), int(sensor_data["position"]["y"]))]
+
+    # Generate mowing pattern waypoints
+    waypoints = create_pattern(pattern_type)
+    # Navigate the waypoints using the A* algorithm
+    navigate_to_waypoints(waypoints, grid, obstacles)
+
+def create_pattern(pattern_type):
+    """Create waypoints based on selected pattern."""
+    waypoints = []
+    if pattern_type == "stripes":
+        for x in range(0, 20, 2):  # Example for stripes
+            waypoints.append((x, 0))
+            waypoints.append((x, 19))
+    # Additional patterns can be added here
+    return waypoints
+
+# MQTT callbacks
+def on_connect(client, userdata, flags, rc):
+    print(f"Connected with result code {rc}")
+    client.subscribe(SENSOR_TOPIC)
+
+def on_message(client, userdata, msg):
+    sensor_data = json.loads(msg.payload.decode())
+    print(f"Received sensor data: {sensor_data}")
+    pattern_type = "stripes"  # You can set this dynamically
+    path_planning_algorithm(sensor_data, pattern_type)
+
+# MQTT setup
+client = mqtt.Client(CLIENT_ID)
+client.on_connect = on_connect
+client.on_message = on_message
+client.connect(BROKER, PORT, 60)
+
+# Main loop
+client.loop_forever()
