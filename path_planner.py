@@ -5,6 +5,7 @@ import numpy as np
 from dotenv import load_dotenv
 import os
 import math
+import cv2
 
 # Load environment variables from .env file
 load_dotenv()
@@ -126,18 +127,112 @@ def path_planning_algorithm(sensor_data, pattern_type):
     obstacles = [(int(sensor_data["position"]["x"]), int(sensor_data["position"]["y"]))]
 
     # Generate mowing pattern waypoints
-    waypoints = create_pattern(pattern_type)
+    waypoints = create_pattern(pattern_type, grid.shape)
     # Navigate the waypoints using the A* algorithm
     navigate_to_waypoints(waypoints, grid, obstacles)
 
-def create_pattern(pattern_type):
+
+def create_pattern(pattern_type, grid_shape):
     """Create waypoints based on selected pattern."""
     waypoints = []
+    width, height = grid_shape
+
     if pattern_type == "stripes":
-        for x in range(0, 20, 2):  # Example for stripes
+        for x in range(0, width, 2):
             waypoints.append((x, 0))
-            waypoints.append((x, 19))
-    # Additional patterns can be added here
+            waypoints.append((x, height - 1))
+
+    elif pattern_type == "criss_cross":
+        for x in range(0, width, 2):
+            waypoints.append((x, 0))
+            waypoints.append((x, height - 1))
+        for y in range(0, height, 2):
+            waypoints.append((0, y))
+            waypoints.append((width - 1, y))
+
+    elif pattern_type == "checkerboard":
+        for x in range(0, width, 4):
+            for y in range(0, height, 4):
+                # Create alternating blocks for the checkerboard pattern
+                waypoints.append((x, y))
+                waypoints.append((x + 2, y + 2))
+                waypoints.append((x, y + 4))
+                waypoints.append((x + 2, y + 6))
+
+    elif pattern_type == "diamond":
+        center_x = width // 2
+        center_y = height // 2
+        max_distance = min(center_x, center_y)
+        for d in range(0, max_distance, 2):
+            waypoints.append((center_x - d, center_y))
+            waypoints.append((center_x, center_y - d))
+            waypoints.append((center_x + d, center_y))
+            waypoints.append((center_x, center_y + d))
+
+    elif pattern_type == "waves":
+        for y in range(0, height, 4):
+            for x in range(width):
+                offset = (x % 10) // 5  # Change offset frequency for wave effect
+                if offset == 0:
+                    waypoints.append((x, y))
+                else:
+                    waypoints.append((x, y + offset))
+
+    elif pattern_type == "concentric_circles":
+        center_x = width // 2
+        center_y = height // 2
+        max_radius = min(center_x, center_y)
+        for r in range(2, max_radius, 3):
+            waypoints.extend(circle_waypoints(center_x, center_y, r))
+
+    elif pattern_type == "stars":
+        # Define star points relative to center
+        center_x, center_y = width // 2, height // 2
+        for i in range(5):
+            angle = np.radians(i * 144)  # Star points are spaced 144 degrees apart
+            outer_x = int(center_x + (width // 4) * np.cos(angle))
+            outer_y = int(center_y + (height // 4) * np.sin(angle))
+            waypoints.append((outer_x, outer_y))
+
+    elif pattern_type == "custom_image":
+        img_path = os.getenv("USER_IMAGE_PATH", "image.png")
+        x_offset = int(os.getenv("IMAGE_X_OFFSET", 0))
+        y_offset = int(os.getenv("IMAGE_Y_OFFSET", 0))
+        waypoints = image_to_waypoints(img_path, x_offset, y_offset, grid_shape)
+
+    else:
+        raise ValueError(f"Unsupported pattern type: {pattern_type}")
+
+    return waypoints
+
+
+def image_to_waypoints(img_path, x_offset, y_offset, grid_shape):
+    """Convert an image to a set of waypoints."""
+    img = cv2.imread(img_path, cv2.IMREAD_GRAYSCALE)
+    img = cv2.resize(img, (grid_shape[1], grid_shape[0]))
+
+    # Threshold the image to find contours
+    _, binary = cv2.threshold(img, 127, 255, cv2.THRESH_BINARY)
+    contours, _ = cv2.findContours(binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+    waypoints = []
+    for contour in contours:
+        for point in contour:
+            x = point[0][0] + x_offset
+            y = point[0][1] + y_offset
+            if 0 <= x < grid_shape[1] and 0 <= y < grid_shape[0]:
+                waypoints.append((x, y))
+
+    return waypoints
+
+
+def circle_waypoints(center_x, center_y, radius, step=15):
+    """Generate waypoints for a circle with a given radius."""
+    waypoints = []
+    for angle in range(0, 360, step):
+        x = int(center_x + radius * np.cos(np.radians(angle)))
+        y = int(center_y + radius * np.sin(np.radians(angle)))
+        waypoints.append((x, y))
     return waypoints
 
 # MQTT callbacks
