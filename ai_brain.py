@@ -267,7 +267,7 @@ def on_message(client, userdata, msg):
     path_planning_algorithm(sensor_data, pattern_type)
 
 # MQTT setup
-client = mqtt.Client(CLIENT_ID)
+client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
 client.on_connect = on_connect
 client.on_message = on_message
 client.connect(BROKER, PORT, 60)
