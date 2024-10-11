@@ -273,7 +273,7 @@ def on_connect(client, userdata, flags, rc, properties=None):
     client.subscribe(MOWING_AREA_TOPIC)
     client.subscribe(GPS_TOPIC)
     client.subscribe('mower/pattern_type')
-    client.subscribe(OBSTACLE_MAP_TOPIC)
+    client.subscribe('mower/obstacle_map')
 
 pattern_type = "stripes"  # Default pattern type
 
