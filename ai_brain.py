@@ -15,7 +15,7 @@ load_dotenv()
 # MQTT settings from .env file
 BROKER = os.getenv("PI4_IP", "localhost")
 PORT = int(os.getenv("MQTT_PORT", 1883))
-SENSOR_TOPIC = os.getenv('mower/sensor_data')
+SENSOR_TOPIC = 'mower/sensor_data'
 GPS_TOPIC = os.getenv("GPS_TOPIC", "mower/gps")
 COMMAND_TOPIC = os.getenv("COMMAND_TOPIC", "mower/command")
 CLIENT_ID = os.getenv("MQTT_CLIENT_ID", "RaspberryPiPlanner")
