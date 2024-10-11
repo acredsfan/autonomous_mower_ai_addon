@@ -10,11 +10,13 @@ import cv2
 # Load environment variables from .env file
 load_dotenv()
 
+
 # MQTT settings from .env file
-BROKER = os.getenv("MQTT_BROKER_IP")
+BROKER = os.getenv("PI4_IP", "localhost")
 PORT = int(os.getenv("MQTT_PORT", 1883))
 SENSOR_TOPIC = os.getenv("SENSOR_TOPIC", "mower/sensor_data")
-COMMAND_TOPIC = os.getenv("COMMAND_TOPIC", "mower/commands")
+GPS_TOPIC = os.getenv("GPS_TOPIC", "mower/gps")
+COMMAND_TOPIC = os.getenv("COMMAND_TOPIC", "mower/command")
 CLIENT_ID = os.getenv("MQTT_CLIENT_ID", "RaspberryPiPlanner")
 
 # Read the mowing area from a JSON file (Google Maps API polygon)
@@ -115,20 +117,38 @@ def navigate_to_waypoints(waypoints, grid, obstacles):
         end = waypoints[i + 1]
         path = a_star_pathfinding(start, end, grid, obstacles)
         for step in path:
-            # Publish each movement command based on path
-            command = {"action": "move_to", "position": step}
+            """ Publish each movement command based on path (target location must
+            be a tuple with latitude and longitude coordinates)
+            """
+            command = {"target_location": {"x": step[0], "y": step[1]}}
             client.publish(COMMAND_TOPIC, json.dumps(command))
-            time.sleep(0.5)  # Adjust timing for smoother motion
+            time.sleep(0.5)
+
+
+def publish_path_to_mqtt(path):
+    """Publish the planned path to the MQTT topic for the WebUI."""
+    path_data = {"path": path}
+    client.publish("mower/path", json.dumps(path_data))
 
 def path_planning_algorithm(sensor_data, pattern_type):
     """Main path planning algorithm integrating pattern selection and A*."""
-    # Placeholder for obstacles from sensor data
     global obstacles
     obstacles = [(int(sensor_data["position"]["x"]), int(sensor_data["position"]["y"]))]
 
     # Generate mowing pattern waypoints
     waypoints = create_pattern(pattern_type, grid.shape)
     # Navigate the waypoints using the A* algorithm
+    full_path = []
+    for i in range(len(waypoints) - 1):
+        start = waypoints[i]
+        end = waypoints[i + 1]
+        path = a_star_pathfinding(start, end, grid, obstacles)
+        full_path.extend(path)
+
+    # Publish the complete path to the MQTT topic for the WebUI
+    publish_path_to_mqtt(full_path)
+
+    # Continue with navigating the waypoints
     navigate_to_waypoints(waypoints, grid, obstacles)
 
 
