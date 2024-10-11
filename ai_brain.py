@@ -256,7 +256,7 @@ def circle_waypoints(center_x, center_y, radius, step=15):
     return waypoints
 
 # MQTT callbacks
-def on_connect(client, userdata, flags, rc):
+def on_connect(client, userdata, flags, rc, properties=None):
     print(f"Connected with result code {rc}")
     client.subscribe(SENSOR_TOPIC)
 
