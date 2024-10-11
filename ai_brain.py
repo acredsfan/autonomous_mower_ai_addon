@@ -6,6 +6,7 @@ from dotenv import load_dotenv
 import os
 import math
 import cv2
+import logging
 
 # Load environment variables from .env file
 load_dotenv()
@@ -284,10 +285,14 @@ def on_message(client, userdata, msg):
     else:
         print(f"Unknown topic: {msg.topic}")
 
+def on_publish(client, userdata, mid):
+    logging.info(f"Published message ID: {mid}")
+
 # MQTT setup
 client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
 client.on_connect = on_connect
 client.on_message = on_message
+client.on_publish
 client.connect(BROKER, PORT, 60)
 
 # Main loop
