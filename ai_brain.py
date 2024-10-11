@@ -20,6 +20,7 @@ GPS_TOPIC = os.getenv("GPS_TOPIC", "mower/gps")
 COMMAND_TOPIC = os.getenv("COMMAND_TOPIC", "mower/command")
 CLIENT_ID = os.getenv("MQTT_CLIENT_ID", "RaspberryPiPlanner")
 MOWING_AREA_TOPIC = os.getenv("MOWING_AREA_TOPIC", "mower/mowing_area")
+OBSTACLE_MAP_TOPIC = "mower/obstacle_map"
 
 # Read the mowing area from MQTT
 mowing_area_polygon = [(0, 0), (0, 10), (10, 10), (10, 0)]  # Default square area
@@ -131,10 +132,19 @@ def publish_path_to_mqtt(path):
     path_data = {"path": path}
     client.publish("mower/path", json.dumps(path_data))
 
-def path_planning_algorithm(sensor_data, pattern_type):
+# Convert GPS latitude and longitude to x, y coordinates
+def gps_to_xy(latitude, longitude, grid_size=1):
+    """Convert GPS coordinates to x, y coordinates."""
+    # Convert latitude and longitude to x, y coordinates
+    x = (longitude - 0) / grid_size
+    y = (latitude - 0) / grid_size
+    return int(x), int(y)
+
+def path_planning_algorithm(obstacle_map, pattern_type):
     """Main path planning algorithm integrating pattern selection and A*."""
     global obstacles
-    obstacles = [(int(sensor_data["position"]["x"]), int(sensor_data["position"]["y"]))]
+    # Obstacles will come from mower/obstacle_location topic as an array of tuples with
+    obstacles = [gps_to_xy(obstacle[0], obstacle[1]) for obstacle in obstacle_map["obstacles"]]
 
     # Generate mowing pattern waypoints
     waypoints = create_pattern(pattern_type, grid.shape)
@@ -263,6 +273,7 @@ def on_connect(client, userdata, flags, rc, properties=None):
     client.subscribe(MOWING_AREA_TOPIC)
     client.subscribe(GPS_TOPIC)
     client.subscribe('mower/pattern_type')
+    client.subscribe(OBSTACLE_MAP_TOPIC)
 
 pattern_type = "stripes"  # Default pattern type
 
@@ -272,7 +283,6 @@ def on_message(client, userdata, msg):
         sensor_data = json.loads(msg.payload.decode())
         print(f"Received sensor data: {sensor_data}")
         # Use the updated pattern_type
-        path_planning_algorithm(sensor_data, pattern_type)
     elif msg.topic == MOWING_AREA_TOPIC:
         on_mowing_area_message(client, userdata, msg)
     elif msg.topic == GPS_TOPIC:
@@ -282,6 +292,12 @@ def on_message(client, userdata, msg):
     elif msg.topic == 'mower/pattern_type':
         pattern_type = msg.payload.decode()
         print(f"Received pattern type: {pattern_type}")
+    elif msg.topic == OBSTACLE_MAP_TOPIC:
+        # Update the obstacle map
+        obstacle_map = json.loads(msg.payload.decode())
+        path_planning_algorithm(obstacle_map, pattern_type)
+        print(f"Received obstacle map: {obstacle_map}")
+        pass
     else:
         print(f"Unknown topic: {msg.topic}")
 
