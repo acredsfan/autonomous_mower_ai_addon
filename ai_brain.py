@@ -259,12 +259,30 @@ def circle_waypoints(center_x, center_y, radius, step=15):
 def on_connect(client, userdata, flags, rc, properties=None):
     print(f"Connected with result code {rc}")
     client.subscribe(SENSOR_TOPIC)
+    client.subscribe(MOWING_AREA_TOPIC)
+    client.subscribe(GPS_TOPIC)
+    client.subscribe('mower/pattern_type')
+
+pattern_type = "stripes"  # Default pattern type
 
 def on_message(client, userdata, msg):
-    sensor_data = json.loads(msg.payload.decode())
-    print(f"Received sensor data: {sensor_data}")
-    pattern_type = "stripes"  # You can set this dynamically
-    path_planning_algorithm(sensor_data, pattern_type)
+    global pattern_type
+    if msg.topic == SENSOR_TOPIC:
+        sensor_data = json.loads(msg.payload.decode())
+        print(f"Received sensor data: {sensor_data}")
+        # Use the updated pattern_type
+        path_planning_algorithm(sensor_data, pattern_type)
+    elif msg.topic == MOWING_AREA_TOPIC:
+        on_mowing_area_message(client, userdata, msg)
+    elif msg.topic == GPS_TOPIC:
+        gps_data = json.loads(msg.payload.decode())
+        print(f"Received GPS data: {gps_data}")
+        # Process GPS data as needed
+    elif msg.topic == 'mower/pattern_type':
+        pattern_type = msg.payload.decode()
+        print(f"Received pattern type: {pattern_type}")
+    else:
+        print(f"Unknown topic: {msg.topic}")
 
 # MQTT setup
 client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
