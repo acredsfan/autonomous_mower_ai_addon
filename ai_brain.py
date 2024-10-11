@@ -18,15 +18,15 @@ SENSOR_TOPIC = os.getenv("SENSOR_TOPIC", "mower/sensor_data")
 GPS_TOPIC = os.getenv("GPS_TOPIC", "mower/gps")
 COMMAND_TOPIC = os.getenv("COMMAND_TOPIC", "mower/command")
 CLIENT_ID = os.getenv("MQTT_CLIENT_ID", "RaspberryPiPlanner")
+MOWING_AREA_TOPIC = os.getenv("MOWING_AREA_TOPIC", "mower/mowing_area")
 
-# Read the mowing area from a JSON file (Google Maps API polygon)
-def load_mowing_area(filename="mowing_area.json"):
-    """Load mowing area polygon from JSON file."""
-    with open(filename, "r") as f:
-        mowing_area = json.load(f)
-    return mowing_area["polygon"]
+# Read the mowing area from MQTT
+mowing_area_polygon = [(0, 0), (0, 10), (10, 10), (10, 0)]  # Default square area
+def on_mowing_area_message(client, userdata, msg):
+    global mowing_area_polygon
+    mowing_area_polygon = json.loads(msg.payload.decode())
+    print(f"Received mowing area: {mowing_area_polygon}")
 
-mowing_area_polygon = load_mowing_area()  # Load polygon from JSON file
 
 def point_in_polygon(x, y, polygon):
     """Check if a point (x, y) is inside the polygon."""
